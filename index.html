@@ -372,6 +372,9 @@
             let videoStream = null;
             let animationFrameId = null;
 
+            // Lưu trữ dữ liệu bổ sung từ API
+            let rawAssetData = {};
+
             const videoEl = document.getElementById("videoElement");
             const videoContainer = document.getElementById("videoContainer");
             const canvasEl = document.getElementById("qr-canvas");
@@ -660,6 +663,8 @@
                     hideLoading();
 
                     if (data.status && data.status.toLowerCase() === "success") {
+                        rawAssetData = data; // Lưu toàn bộ dữ liệu phản hồi từ server
+
                         const maTSVal = data.maTaiSan || qrResult;
                         const soSeriVal = data.soSeri || "";
                         const loaiMayVal = data.loaiMay || "";
@@ -680,6 +685,7 @@
                         localStorage.setItem("brand", nhanHieuVal);
                         localStorage.setItem("model", modelVal);
                         localStorage.setItem("codeBaoTri", maTSVal);
+                        localStorage.setItem("rawAssetData", JSON.stringify(data));
 
                         renderUIState();
                     } else {
@@ -715,7 +721,6 @@
 
                 showLoading("Đang lấy dữ liệu...");
 
-                // Tạo chuỗi dữ liệu dạng URL-encoded cho POST body chuẩn xác
                 const requestBody =
                     `func=capnhatduongdan` +
                     `&idUser=${encodeURIComponent(idUserVal)}` +
@@ -773,7 +778,6 @@
 
                 const idUser = userAppData.user.username;
                 const tenNguoiDung = userAppData.user.name;
-                const phanXuong = userAppData.user.local || "";
                 const token = userAppData.user.token;
 
                 const rawAppData = localStorage.getItem(STORAGE_KEY);
@@ -799,21 +803,29 @@
 
                 showLoading("Đang đồng bộ dữ liệu...");
 
+                // Chuẩn bị tham số khớp 100% với e.parameter trên server
+                const ngayNhanMay = rawAssetData.ngayNhanMay || "";
+                const tinhTrang = rawAssetData.tinhTrang || "";
+                const tinhTrangDuyet = rawAssetData.tinhTrangDuyet || "";
+
                 const requestBody =
                     `func=capnhatdata` +
                     `&idUser=${encodeURIComponent(idUser)}` +
-                    `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
-                    `&phanXuong=${encodeURIComponent(phanXuong)}` +
                     `&token=${encodeURIComponent(token)}` +
-                    `&maBaoTri=${encodeURIComponent(maBaoTri)}` +
+                    `&nguoiCapNhat=${encodeURIComponent(tenNguoiDung)}` +
+                    `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
+                    `&mtsDuocCap=${encodeURIComponent(maBaoTri)}` +
                     `&maKeToan=${encodeURIComponent(maKeToan)}` +
                     `&soSeri=${encodeURIComponent(serialNumberEl.textContent.trim())}` +
                     `&loaiMay=${encodeURIComponent(machineTypeEl.textContent.trim())}` +
                     `&nhanHieu=${encodeURIComponent(brandEl.textContent.trim())}` +
                     `&model=${encodeURIComponent(modelEl.textContent.trim())}` +
+                    `&ngayNhanMay=${encodeURIComponent(ngayNhanMay)}` +
+                    `&tinhTrang=${encodeURIComponent(tinhTrang)}` +
+                    `&tinhTrangDuyet=${encodeURIComponent(tinhTrangDuyet)}` +
                     `&ghiChu=${encodeURIComponent(noteInput.value.trim())}`;
 
-                console.log("Request body đồng bộ:", requestBody);
+                console.log("Request body đồng bộ gửi server:", requestBody);
 
                 fetch(apiUrl, {
                     method: "POST",
@@ -855,6 +867,9 @@
                 localStorage.removeItem("brand");
                 localStorage.removeItem("model");
                 localStorage.removeItem("note");
+                localStorage.removeItem("rawAssetData");
+
+                rawAssetData = {};
 
                 assetCodeEl.textContent = "";
                 serialNumberEl.textContent = "";
@@ -875,6 +890,15 @@
 
                 let savedCodeBaoTri = localStorage.getItem("codeBaoTri");
                 let savedCodeKeToan = localStorage.getItem("codeKeToan");
+                let savedRawData = localStorage.getItem("rawAssetData");
+
+                if (savedRawData) {
+                    try {
+                        rawAssetData = JSON.parse(savedRawData);
+                    } catch (e) {
+                        rawAssetData = {};
+                    }
+                }
 
                 if (savedCodeBaoTri) {
                     codeBaoTriEl.textContent = savedCodeBaoTri;
