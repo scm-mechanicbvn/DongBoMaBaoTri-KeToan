@@ -414,7 +414,7 @@
                 loadingOverlay.style.display = "flex";
             }
 
-            function showSuccess(msg = "Thành công!") {
+            function showSuccess(msg = "Thành công!", callback = null) {
                 loadingSpinner.style.display = "none";
                 const oldCheckmark = document.getElementById("loading-checkmark");
                 if (oldCheckmark) {
@@ -423,7 +423,14 @@
                     oldCheckmark.parentNode.replaceChild(newCheckmark, oldCheckmark);
                 }
                 loadingText.textContent = msg;
-                setTimeout(() => { hideLoading(); }, 1700);
+
+                // Giữ màn hình tích V trong 1.5 giây mới đóng và thực hiện callback (nếu có)
+                setTimeout(() => {
+                    hideLoading();
+                    if (typeof callback === "function") {
+                        callback();
+                    }
+                }, 1500);
             }
 
             function hideLoading() {
@@ -697,7 +704,6 @@
                 });
             }
 
-            // HÀM LÀM MỚI: Ghép func=capnhatduongdan vào URL truongTrinhCapNhatThanhPhanApp
             function updateData() {
                 if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.token) {
                     alert("Đã xảy ra sự cố! Vui lòng đăng nhập lại.");
@@ -727,7 +733,6 @@
 
                 showLoading("Đang lấy dữ liệu...");
 
-                // Ghép func=capnhatduongdan vào cuối URL (tự động xử lý ? hoặc &)
                 const separator = apiBaseUrl.includes("?") ? "&" : "?";
                 const fullUrl = `${apiBaseUrl}${separator}func=capnhatduongdan&idUser=${encodeURIComponent(idUserVal)}&token=${encodeURIComponent(tokenVal)}`;
 
@@ -837,8 +842,10 @@
                 })
                 .then(resData => {
                     if (resData.status === "success") {
-                        clearSyncData();
-                        showSuccess(resData.notification || "Đồng bộ mã thành công!");
+                        // Hiển thị tích V 1.5s rồi mới gọi clearSyncData
+                        showSuccess(resData.notification || "Đồng bộ mã thành công!", () => {
+                            clearSyncData();
+                        });
                     } else {
                         hideLoading();
                         alert(resData.notification || "Đồng bộ thất bại, vui lòng thử lại.");
