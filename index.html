@@ -469,23 +469,39 @@
                 return { userId, token };
             }
 
-            // 1. KEY API GIỮ NGUYÊN CHO CÁC TÁC VỤ THƯỜNG (LÀM MỚI & TRUY VẤN MÃ LẦN 1)
-            function getBaseApiUrl(appData) {
-                if (!appData || !appData.app) return "";
-                if (appData.app.API) return appData.app.API;
-                if (appData.app.truongTrinhQuanLyThietBi && appData.app.truongTrinhQuanLyThietBi.API) {
-                    return appData.app.truongTrinhQuanLyThietBi.API;
+            // --- CÁC HÀM TRÍCH XUẤT API THEO ĐÚNG CẤU TRÚC ĐỊNH NGHĨA ---
+
+            // 1. API NÚT LÀM MỚI
+            function getRefreshApiUrl() {
+                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
+                try {
+                    return jsonData ? JSON.parse(jsonData).app.truongTrinhCapNhatThanhPhanApp.API : "";
+                } catch (e) {
+                    console.error("Lỗi lấy API Cập Nhật:", e);
+                    return "";
                 }
-                return "";
             }
 
-            // 2. KEY API CHỈ THAY ĐỔI RIÊNG CHO ĐỒNG BỘ DỮ LIỆU
-            function getSyncApiUrl(appData) {
-                if (!appData || !appData.app) return "";
-                if (appData.app.truongTrinhDongBoKeToan && appData.app.truongTrinhDongBoKeToan.API) {
-                    return appData.app.truongTrinhDongBoKeToan.API;
+            // 2. API QUÉT LẦN 1 (LẤY DANH SÁCH TÀI SẢN)
+            function getAssetApiUrl() {
+                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
+                try {
+                    return jsonData ? JSON.parse(jsonData).app.truongTrinhLayDanhSachTaiSanTNM.API : "";
+                } catch (e) {
+                    console.error("Lỗi lấy API Tài Sản:", e);
+                    return "";
                 }
-                return getBaseApiUrl(appData);
+            }
+
+            // 3. API ĐỒNG BỘ DỮ LIỆU
+            function getSyncApiUrl() {
+                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
+                try {
+                    return jsonData ? JSON.parse(jsonData).app.truongTrinhDongBoKeToan.API : "";
+                } catch (e) {
+                    console.error("Lỗi lấy API Đồng Bộ:", e);
+                    return "";
+                }
             }
 
             function loadUserData() {
@@ -506,7 +522,7 @@
                 return true;
             }
 
-            // --- 3. QUẢN LÝ TRẠNG THÁI ẨN/HIỆN THÔNG TIN NGƯỜI DÙNG ---
+            // --- QUẢN LÝ TRẠNG THÁI ẨN/HIỆN THÔNG TIN NGƯỜI DÙNG ---
             const savedToggleState = localStorage.getItem("userInfoDisplayState_DongBoCode");
             if (savedToggleState) {
                 userInfoSection.style.display = savedToggleState;
@@ -519,7 +535,7 @@
                 localStorage.setItem("userInfoDisplayState_DongBoCode", newDisplayState);
             });
 
-            // --- 4. CẬP NHẬT GIAO DIỆN NÚT BẤM VÀ ĐIỀU KHIỂN ---
+            // --- CẬP NHẬT GIAO DIỆN NÚT BẤM VÀ ĐIỀU KHIỂN ---
             function renderUIState() {
                 const hasScan1 = !!codeBaoTriEl.textContent.trim();
                 const hasScan2 = !!codeKeToanEl.textContent.trim();
@@ -550,7 +566,7 @@
                         actionBtn2.style.display = "none";
                         syncButton.style.display = "none";
                     } else if (hasScan1 && !hasScan2) {
-                        // Đã quét lần 1, chuẩn bị quét lần 2 (Nút Quét lần 2 thay vị trí Bắt đầu quét)
+                        // Đã quét lần 1, chuẩn bị quét lần 2
                         scanStep = 2;
                         actionBtn1.style.display = "block";
                         actionBtn1.textContent = "Quét lần 2";
@@ -576,7 +592,6 @@
                 }
             }
 
-            // Click Nút hành động 1 (Bắt đầu quét / Quét lần 2 / Quét lại)
             actionBtn1.addEventListener("click", () => {
                 if (isCameraRunning) return;
 
@@ -594,7 +609,6 @@
                 startScanner();
             });
 
-            // Click Nút hành động 2 (Dừng quét HOẶC Hủy kết quả)
             actionBtn2.addEventListener("click", () => {
                 if (isCameraRunning) {
                     stopScanner();
@@ -605,7 +619,7 @@
                 }
             });
 
-            // --- 5. ĐIỀU KHIỂN CAMERA ---
+            // --- ĐIỀU KHIỂN CAMERA ---
             function startScanner() {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
@@ -672,16 +686,16 @@
                 }
             }
 
-            // --- 6. TRUY VẤN THÔNG TIN THIẾT BỊ (GIỮ NGUYÊN KEY API BAN ĐẦU) ---
+            // --- TRUY VẤN THÔNG TIN THIẾT BỊ (DÙNG KEY truongTrinhLayDanhSachTaiSanTNM) ---
             function fetchAssetData(assetCode) {
                 stopScanner();
 
                 const appData = getAppData();
                 const auth = getAuthInfo(appData);
-                const apiUrl = getBaseApiUrl(appData);
+                const apiUrl = getAssetApiUrl();
 
                 if (!auth || !apiUrl) {
-                    alert("Không tìm thấy thông tin xác thực hoặc URL API. Vui lòng đăng nhập lại!");
+                    alert("Không tìm thấy thông tin xác thực hoặc URL API (truongTrinhLayDanhSachTaiSanTNM). Vui lòng đăng nhập lại!");
                     renderUIState();
                     return;
                 }
@@ -750,14 +764,14 @@
                 });
             }
 
-            // --- 7. LÀM MỚI DỮ LIỆU (GIỮ NGUYÊN KEY API BAN ĐẦU) ---
+            // --- LÀM MỚI DỮ LIỆU (DÙNG KEY truongTrinhCapNhatThanhPhanApp) ---
             function updateData() {
                 const appData = getAppData();
                 const auth = getAuthInfo(appData);
-                const apiUrl = getBaseApiUrl(appData);
+                const apiUrl = getRefreshApiUrl();
 
                 if (!auth || !apiUrl) {
-                    alert("Không tìm thấy cấu hình tài khoản hoặc URL API. Vui lòng đăng nhập lại!");
+                    alert("Không tìm thấy cấu hình tài khoản hoặc URL API (truongTrinhCapNhatThanhPhanApp). Vui lòng đăng nhập lại!");
                     localStorage.removeItem(APP_STORAGE_KEY);
                     window.location.href = "login.html";
                     return;
@@ -822,14 +836,14 @@
                 }
             });
 
-            // --- 8. ĐỒNG BỘ MÃ (CHỈ THAY ĐỔI DÙNG KEY API truongTrinhDongBoKeToan) ---
+            // --- ĐỒNG BỘ MÃ (DÙNG KEY truongTrinhDongBoKeToan) ---
             syncButton.addEventListener("click", () => {
                 const appData = getAppData();
                 const auth = getAuthInfo(appData);
-                const apiUrl = getSyncApiUrl(appData); // Đã đổi sang truongTrinhDongBoKeToan
+                const apiUrl = getSyncApiUrl();
 
                 if (!auth || !apiUrl) {
-                    alert("Chưa đăng nhập hoặc thiếu Token / URL API xác thực!");
+                    alert("Chưa đăng nhập hoặc thiếu Token / URL API xác thực (truongTrinhDongBoKeToan)!");
                     window.location.href = "login.html";
                     return;
                 }
@@ -899,7 +913,7 @@
                 localStorage.setItem("note", this.value);
             });
 
-            // --- 9. HÀM XÓA KẾT QUẢ QUÉT ---
+            // --- XÓA KẾT QUẢ QUÉT ---
             function clearSyncData() {
                 localStorage.removeItem("codeBaoTri");
                 localStorage.removeItem("codeKeToan");
@@ -924,7 +938,7 @@
                 renderUIState();
             }
 
-            // --- 10. KHÔI PHỤC TRẠNG THÁI DỮ LIỆU ---
+            // --- KHÔI PHỤC TRẠNG THÁI DỮ LIỆU ---
             function restoreSavedState() {
                 if (!loadUserData()) return;
 
