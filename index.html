@@ -258,9 +258,7 @@
         }
 
         @keyframes stroke {
-            100% {
-                stroke-dashoffset: 0;
-            }
+            100% { stroke-dashoffset: 0; }
         }
 
         .loading-text {
@@ -707,8 +705,8 @@
                 const idUserVal = userAppData.user.username;
                 const tokenVal = userAppData.user.token;
 
-                const rawAppData = localStorage.getItem(STORAGE_KEY);
-                const apiBaseUrl = rawAppData ? JSON.parse(rawAppData).app.truongTrinhCapNhatThanhPhanApp.API : "";
+                const jsonData = localStorage.getItem(STORAGE_KEY);
+                const apiBaseUrl = jsonData ? JSON.parse(jsonData).app.truongTrinhCapNhatThanhPhanApp.API : "";
 
                 if (!apiBaseUrl) {
                     alert("Không tìm thấy API Base URL.");
@@ -717,12 +715,13 @@
 
                 showLoading("Đang lấy dữ liệu...");
 
+                // Tạo chuỗi dữ liệu dạng URL-encoded cho POST body chuẩn xác
                 const requestBody =
                     `func=capnhatduongdan` +
                     `&idUser=${encodeURIComponent(idUserVal)}` +
                     `&token=${encodeURIComponent(tokenVal)}`;
 
-                console.log("Request body:", requestBody);
+                console.log("Request body cập nhật app:", requestBody);
 
                 fetch(apiBaseUrl, {
                     method: "POST",
@@ -800,7 +799,6 @@
 
                 showLoading("Đang đồng bộ dữ liệu...");
 
-                // Đã cập nhật func=capnhatdata theo chuẩn yêu cầu
                 const requestBody =
                     `func=capnhatdata` +
                     `&idUser=${encodeURIComponent(idUser)}` +
