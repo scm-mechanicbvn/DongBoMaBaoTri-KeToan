@@ -22,7 +22,6 @@
             color: #333;
         }
 
-        /* --- Thanh nút bấm trên cùng --- */
         .top-button-container {
             display: flex;
             justify-content: space-between;
@@ -60,7 +59,6 @@
             background-color: #dc3545;
         }
 
-        /* --- Khối thông tin người dùng & Bảng --- */
         .input-container {
             width: 94%;
             max-width: 600px;
@@ -99,7 +97,6 @@
             font-weight: 600;
         }
 
-        /* --- Khối điều khiển camera / Thao tác quét --- */
         .button-container {
             display: flex;
             justify-content: space-between;
@@ -140,7 +137,6 @@
             color: white;
         }
 
-        /* --- Container khung hình Video Quét --- */
         #videoContainer {
             display: none;
             margin: 10px auto;
@@ -182,7 +178,6 @@
             border-color: #007BFF;
         }
 
-        /* --- Nút Đồng bộ mã --- */
         #sync-button {
             display: none;
             margin: 15px auto;
@@ -204,7 +199,6 @@
             transform: scale(0.98);
         }
 
-        /* --- LOADING OVERLAY POPUP GIỮA MÀN HÌNH --- */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -278,7 +272,7 @@
 </head>
 <body>
 
-    <!-- OVERLAY LOADING GIỮA MÀN HÌNH -->
+    <!-- OVERLAY LOADING -->
     <div id="loading-overlay" class="loading-overlay">
         <div class="loading-box">
             <div id="loading-spinner" class="spinner"></div>
@@ -290,14 +284,14 @@
         </div>
     </div>
 
-    <!-- Khối nút bấm chức năng trên đầu -->
+    <!-- Thanh nút bấm trên đầu -->
     <div class="top-button-container">
         <button id="logout-button">Đăng xuất</button>
         <button id="refresh-button">Làm mới</button>
         <button id="toggle-button">Ẩn/Hiện</button>
     </div>
 
-    <!-- Thông tin tài khoản người dùng -->
+    <!-- Thông tin người dùng -->
     <div class="input-container" id="user-info-section">
         <table>
             <tr>
@@ -321,14 +315,14 @@
         <button id="action-btn-2" class="btn-danger" style="display: none;">Dừng quét</button>
     </div>
 
-    <!-- Khung hiển thị Camera -->
+    <!-- Khung camera -->
     <div id="videoContainer">
         <div id="videoWrapper">
             <video id="videoElement" playsinline></video>
         </div>
     </div>
 
-    <!-- Bảng 1: Thông tin thiết bị từ Lần 1 -->
+    <!-- Bảng thông tin thiết bị -->
     <table>
         <tr>
             <th>Mã tài sản</th>
@@ -352,7 +346,7 @@
         </tr>
     </table>
 
-    <!-- Bảng 2: Mã Đồng bộ Bảo Trì & Kế Toán -->
+    <!-- Bảng Mã Đồng bộ -->
     <table>
         <tr>
             <th>Mã - BP Bảo Trì</th>
@@ -368,16 +362,15 @@
         </tr>
     </table>
 
-    <!-- Nút Đồng bộ -->
     <button id="sync-button">Đồng bộ mã</button>
-
-    <!-- Canvas ẩn phục vụ giải mã QR -->
     <canvas id="qr-canvas" style="display:none;"></canvas>
 
     <script>
         window.onload = function () {
+            // Thay đổi duy nhất khóa lưu trữ theo yêu cầu
             const APP_STORAGE_KEY = "userAppDataOfDKienInBVN";
 
+            let userAppData = null;
             let scanStep = 1;
             let isCameraRunning = false;
             let videoStream = null;
@@ -388,35 +381,29 @@
             const canvasEl = document.getElementById("qr-canvas");
             const canvasCtx = canvasEl.getContext("2d");
 
-            // Info Elements
-            const userIdEl = document.getElementById("displayed-user-id");
-            const userNameEl = document.getElementById("displayed-username");
-            const phanXuongEl = document.getElementById("displayed-phanxuong");
+            const displayedUserId = document.getElementById("displayed-user-id");
+            const displayedUsername = document.getElementById("displayed-username");
+            const displayedPhanXuong = document.getElementById("displayed-phanxuong");
 
-            // Asset Elements
             const assetCodeEl = document.getElementById("asset-code");
             const serialNumberEl = document.getElementById("serial-number");
             const machineTypeEl = document.getElementById("machine-type");
             const brandEl = document.getElementById("brand");
             const modelEl = document.getElementById("model");
 
-            // Sync Elements
             const codeBaoTriEl = document.getElementById("code-bao-tri");
             const codeKeToanEl = document.getElementById("code-ke-toan");
             const noteInput = document.getElementById("note");
 
-            // Dynamic Action Buttons
             const actionBtn1 = document.getElementById("action-btn-1");
             const actionBtn2 = document.getElementById("action-btn-2");
             const syncButton = document.getElementById("sync-button");
 
-            // Top Buttons
             const refreshBtn = document.getElementById("refresh-button");
             const logoutBtn = document.getElementById("logout-button");
             const toggleBtn = document.getElementById("toggle-button");
             const userInfoSection = document.getElementById("user-info-section");
 
-            // Loading Elements
             const loadingOverlay = document.getElementById("loading-overlay");
             const loadingSpinner = document.getElementById("loading-spinner");
             const loadingText = document.getElementById("loading-text");
@@ -448,81 +435,29 @@
                 if (checkmarkEl) checkmarkEl.style.display = "none";
             }
 
-            function getAppData() {
-                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
-                if (!jsonData) return null;
-                try {
-                    return JSON.parse(jsonData);
-                } catch (e) {
-                    console.error("Lỗi parse JSON:", e);
-                    return null;
-                }
-            }
-
-            function getAuthInfo(appData) {
-                if (!appData || !appData.user) return null;
-                const user = appData.user;
-                const userId = user.username || user.id || user.maSoThe || "";
-                const token = user.token || "";
-
-                if (!userId || !token) return null;
-                return { userId, token };
-            }
-
-            // --- CÁC HÀM TRÍCH XUẤT API THEO ĐÚNG CẤU TRÚC ĐỊNH NGHĨA ---
-
-            // 1. API NÚT LÀM MỚI
-            function getRefreshApiUrl() {
-                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
-                try {
-                    return jsonData ? JSON.parse(jsonData).app.truongTrinhCapNhatThanhPhanApp.API : "";
-                } catch (e) {
-                    console.error("Lỗi lấy API Cập Nhật:", e);
-                    return "";
-                }
-            }
-
-            // 2. API QUÉT LẦN 1 (LẤY DANH SÁCH TÀI SẢN)
-            function getAssetApiUrl() {
-                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
-                try {
-                    return jsonData ? JSON.parse(jsonData).app.truongTrinhLayDanhSachTaiSanTNM.API : "";
-                } catch (e) {
-                    console.error("Lỗi lấy API Tài Sản:", e);
-                    return "";
-                }
-            }
-
-            // 3. API ĐỒNG BỘ DỮ LIỆU
-            function getSyncApiUrl() {
-                const jsonData = localStorage.getItem(APP_STORAGE_KEY);
-                try {
-                    return jsonData ? JSON.parse(jsonData).app.truongTrinhDongBoKeToan.API : "";
-                } catch (e) {
-                    console.error("Lỗi lấy API Đồng Bộ:", e);
-                    return "";
-                }
-            }
-
             function loadUserData() {
-                const appData = getAppData();
-                const auth = getAuthInfo(appData);
-
-                if (!appData || !auth) {
+                const userAppDataString = localStorage.getItem(APP_STORAGE_KEY);
+                if (userAppDataString) {
+                    try {
+                        userAppData = JSON.parse(userAppDataString);
+                        displayedUserId.textContent = (userAppData.user && userAppData.user.username) ? userAppData.user.username : "";
+                        displayedUsername.textContent = (userAppData.user && userAppData.user.name) ? userAppData.user.name : "";
+                        displayedPhanXuong.textContent = (userAppData.user && userAppData.user.local) ? userAppData.user.local : "";
+                        return true;
+                    } catch (e) {
+                        console.error("Lỗi phân tích dữ liệu người dùng từ localStorage:", e);
+                        localStorage.removeItem(APP_STORAGE_KEY);
+                        userAppData = null;
+                        window.location.href = "login.html";
+                        return false;
+                    }
+                } else {
                     alert("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại!");
-                    localStorage.removeItem(APP_STORAGE_KEY);
                     window.location.href = "login.html";
                     return false;
                 }
-
-                const user = appData.user;
-                userIdEl.textContent = user.username || user.id || "---";
-                userNameEl.textContent = user.name || user.tenNguoiDung || "---";
-                phanXuongEl.textContent = user.local || user.boPhan || "---";
-                return true;
             }
 
-            // --- QUẢN LÝ TRẠNG THÁI ẨN/HIỆN THÔNG TIN NGƯỜI DÙNG ---
             const savedToggleState = localStorage.getItem("userInfoDisplayState_DongBoCode");
             if (savedToggleState) {
                 userInfoSection.style.display = savedToggleState;
@@ -535,13 +470,11 @@
                 localStorage.setItem("userInfoDisplayState_DongBoCode", newDisplayState);
             });
 
-            // --- CẬP NHẬT GIAO DIỆN NÚT BẤM VÀ ĐIỀU KHIỂN ---
             function renderUIState() {
                 const hasScan1 = !!codeBaoTriEl.textContent.trim();
                 const hasScan2 = !!codeKeToanEl.textContent.trim();
 
                 if (isCameraRunning) {
-                    // Khi đang mở Camera
                     actionBtn1.style.display = "block";
                     actionBtn1.disabled = true;
                     actionBtn1.style.opacity = "0.6";
@@ -552,12 +485,10 @@
 
                     syncButton.style.display = "none";
                 } else {
-                    // Khi Camera đang tắt
                     actionBtn1.disabled = false;
                     actionBtn1.style.opacity = "1";
 
                     if (!hasScan1) {
-                        // Chưa quét lần 1
                         scanStep = 1;
                         actionBtn1.style.display = "block";
                         actionBtn1.textContent = "Bắt đầu quét";
@@ -566,7 +497,6 @@
                         actionBtn2.style.display = "none";
                         syncButton.style.display = "none";
                     } else if (hasScan1 && !hasScan2) {
-                        // Đã quét lần 1, chuẩn bị quét lần 2
                         scanStep = 2;
                         actionBtn1.style.display = "block";
                         actionBtn1.textContent = "Quét lần 2";
@@ -578,7 +508,6 @@
 
                         syncButton.style.display = "none";
                     } else {
-                        // Đã hoàn thành cả 2 lần quét
                         actionBtn1.style.display = "block";
                         actionBtn1.textContent = "Quét lại từ đầu";
                         actionBtn1.className = "btn-warning";
@@ -619,7 +548,6 @@
                 }
             });
 
-            // --- ĐIỀU KHIỂN CAMERA ---
             function startScanner() {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
@@ -686,27 +614,35 @@
                 }
             }
 
-            // --- TRUY VẤN THÔNG TIN THIẾT BỊ (DÙNG KEY truongTrinhLayDanhSachTaiSanTNM) ---
-            function fetchAssetData(assetCode) {
+            // Đúng cấu trúc gửi API gốc của bạn
+            function fetchAssetData(qrResult) {
                 stopScanner();
 
-                const appData = getAppData();
-                const auth = getAuthInfo(appData);
-                const apiUrl = getAssetApiUrl();
+                if (!userAppData || !userAppData.user) {
+                    alert("Không tìm thấy thông tin tài khoản!");
+                    renderUIState();
+                    return;
+                }
 
-                if (!auth || !apiUrl) {
-                    alert("Không tìm thấy thông tin xác thực hoặc URL API (truongTrinhLayDanhSachTaiSanTNM). Vui lòng đăng nhập lại!");
+                const idUser = userAppData.user.username;
+                const tenNguoiDung = userAppData.user.name;
+                const token = userAppData.user.token;
+                const apiUrl = (userAppData.app && userAppData.app.truongTrinhLayDanhSachTaiSanTNM) ? userAppData.app.truongTrinhLayDanhSachTaiSanTNM.API : "";
+
+                if (!apiUrl) {
+                    alert("Không tìm thấy cấu hình URL API!");
                     renderUIState();
                     return;
                 }
 
                 showLoading("Đang lấy thông tin thiết bị...");
 
-                const requestBody = `func=getAssetData` +
-                    `&id=${encodeURIComponent(auth.userId)}` +
-                    `&idUser=${encodeURIComponent(auth.userId)}` +
-                    `&token=${encodeURIComponent(auth.token)}` +
-                    `&maBaoTri=${encodeURIComponent(assetCode)}`;
+                const requestBody =
+                    `func=laythongtintsnhamay` +
+                    `&idUser=${encodeURIComponent(idUser)}` +
+                    `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
+                    `&maTS=${encodeURIComponent(qrResult)}` +
+                    `&token=${encodeURIComponent(token)}`;
 
                 let isSuccess = false;
 
@@ -725,7 +661,7 @@
                         hideLoading();
 
                         const asset = response.data;
-                        const realAssetCode = asset.maBaoTri || asset.assetCode || assetCode;
+                        const realAssetCode = asset.maBaoTri || asset.assetCode || qrResult;
                         const realSerial = asset.soSeri || asset.serialNumber || "";
                         const realType = asset.loaiMay || asset.machineType || "";
                         const realBrand = asset.nhanHieu || asset.brand || "";
@@ -764,25 +700,29 @@
                 });
             }
 
-            // --- LÀM MỚI DỮ LIỆU (DÙNG KEY truongTrinhCapNhatThanhPhanApp) ---
             function updateData() {
-                const appData = getAppData();
-                const auth = getAuthInfo(appData);
-                const apiUrl = getRefreshApiUrl();
+                if (!userAppData || !userAppData.user) {
+                    alert("Không tìm thấy thông tin tài khoản!");
+                    return;
+                }
 
-                if (!auth || !apiUrl) {
-                    alert("Không tìm thấy cấu hình tài khoản hoặc URL API (truongTrinhCapNhatThanhPhanApp). Vui lòng đăng nhập lại!");
-                    localStorage.removeItem(APP_STORAGE_KEY);
-                    window.location.href = "login.html";
+                const idUser = userAppData.user.username;
+                const tenNguoiDung = userAppData.user.name;
+                const token = userAppData.user.token;
+                const apiUrl = (userAppData.app && userAppData.app.truongTrinhCapNhatThanhPhanApp) ? userAppData.app.truongTrinhCapNhatThanhPhanApp.API : "";
+
+                if (!apiUrl) {
+                    alert("Không tìm thấy cấu hình URL API cập nhật!");
                     return;
                 }
 
                 showLoading("Đang tải dữ liệu...");
 
-                const requestBody = `func=update` +
-                    `&id=${encodeURIComponent(auth.userId)}` +
-                    `&idUser=${encodeURIComponent(auth.userId)}` +
-                    `&token=${encodeURIComponent(auth.token)}`;
+                const requestBody =
+                    `func=update` +
+                    `&idUser=${encodeURIComponent(idUser)}` +
+                    `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
+                    `&token=${encodeURIComponent(token)}`;
 
                 let isSuccess = false;
 
@@ -799,9 +739,9 @@
                     if (response.status === "success") {
                         isSuccess = true;
                         const updatedAppData = {
-                            user: response.user || appData.user,
-                            app: response.app || appData.app,
-                            data: response.data || appData.data
+                            user: response.user || userAppData.user,
+                            app: response.app || userAppData.app,
+                            data: response.data || userAppData.data
                         };
                         localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(updatedAppData));
                         loadUserData();
@@ -836,15 +776,20 @@
                 }
             });
 
-            // --- ĐỒNG BỘ MÃ (DÙNG KEY truongTrinhDongBoKeToan) ---
             syncButton.addEventListener("click", () => {
-                const appData = getAppData();
-                const auth = getAuthInfo(appData);
-                const apiUrl = getSyncApiUrl();
-
-                if (!auth || !apiUrl) {
-                    alert("Chưa đăng nhập hoặc thiếu Token / URL API xác thực (truongTrinhDongBoKeToan)!");
+                if (!userAppData || !userAppData.user) {
+                    alert("Chưa đăng nhập hoặc không tìm thấy thông tin tài khoản!");
                     window.location.href = "login.html";
+                    return;
+                }
+
+                const idUser = userAppData.user.username;
+                const tenNguoiDung = userAppData.user.name;
+                const token = userAppData.user.token;
+                const apiUrl = (userAppData.app && userAppData.app.truongTrinhDongBoKeToan) ? userAppData.app.truongTrinhDongBoKeToan.API : "";
+
+                if (!apiUrl) {
+                    alert("Không tìm thấy cấu hình URL API đồng bộ!");
                     return;
                 }
 
@@ -863,19 +808,18 @@
 
                 showLoading("Đang đồng bộ dữ liệu...");
 
-                const userObj = appData.user || {};
-                const requestBody = `func=dongbokeToan` +
-                    `&id=${encodeURIComponent(auth.userId)}` +
-                    `&idUser=${encodeURIComponent(auth.userId)}` +
-                    `&token=${encodeURIComponent(auth.token)}` +
+                const requestBody =
+                    `func=dongbokeToan` +
+                    `&idUser=${encodeURIComponent(idUser)}` +
+                    `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
+                    `&token=${encodeURIComponent(token)}` +
                     `&maBaoTri=${encodeURIComponent(maBaoTri)}` +
                     `&maKeToan=${encodeURIComponent(maKeToan)}` +
                     `&soSeri=${encodeURIComponent(serialNumberEl.textContent.trim())}` +
                     `&loaiMay=${encodeURIComponent(machineTypeEl.textContent.trim())}` +
                     `&nhanHieu=${encodeURIComponent(brandEl.textContent.trim())}` +
                     `&model=${encodeURIComponent(modelEl.textContent.trim())}` +
-                    `&tenNguoiDung=${encodeURIComponent(userObj.name || userObj.tenNguoiDung || "")}` +
-                    `&phanXuong=${encodeURIComponent(userObj.local || userObj.boPhan || "")}` +
+                    `&phanXuong=${encodeURIComponent(displayedPhanXuong.textContent.trim())}` +
                     `&ghiChu=${encodeURIComponent(noteInput.value.trim())}`;
 
                 let isSuccess = false;
@@ -913,7 +857,6 @@
                 localStorage.setItem("note", this.value);
             });
 
-            // --- XÓA KẾT QUẢ QUÉT ---
             function clearSyncData() {
                 localStorage.removeItem("codeBaoTri");
                 localStorage.removeItem("codeKeToan");
@@ -938,7 +881,6 @@
                 renderUIState();
             }
 
-            // --- KHÔI PHỤC TRẠNG THÁI DỮ LIỆU ---
             function restoreSavedState() {
                 if (!loadUserData()) return;
 
