@@ -99,7 +99,7 @@
             font-weight: 600;
         }
 
-        /* --- Khối điều khiển camera --- */
+        /* --- Khối điều khiển camera / Thao tác quét --- */
         .button-container {
             display: flex;
             justify-content: space-between;
@@ -111,24 +111,33 @@
         }
 
         .button-container button {
-            width: 48%;
+            flex: 1;
             padding: 12px;
             font-size: 15px;
             font-weight: bold;
             cursor: pointer;
-            background-color: #28a745;
-            color: white;
             border: none;
             border-radius: 6px;
-            transition: transform 0.1s;
+            transition: transform 0.1s, background-color 0.2s;
         }
 
         .button-container button:active {
             transform: scale(0.98);
         }
 
-        .button-container button#stop-button {
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+
+        .btn-danger {
             background-color: #dc3545;
+            color: white;
         }
 
         /* --- Container khung hình Video Quét --- */
@@ -173,8 +182,8 @@
             border-color: #007BFF;
         }
 
-        /* --- Nút Quét lần 2 & Đồng bộ --- */
-        #scan-2-button, #sync-button {
+        /* --- Nút Đồng bộ mã --- */
+        #sync-button {
             display: none;
             margin: 15px auto;
             padding: 12px 24px;
@@ -184,23 +193,15 @@
             border-radius: 8px;
             font-weight: bold;
             width: 94%;
-            max-width: 400px;
+            max-width: 600px;
+            background-color: #28a745;
+            color: white;
             box-shadow: 0 3px 6px rgba(0,0,0,0.15);
             transition: transform 0.1s;
         }
 
-        #scan-2-button:active, #sync-button:active {
+        #sync-button:active {
             transform: scale(0.98);
-        }
-
-        #scan-2-button {
-            background-color: #ffc107;
-            color: #212529;
-        }
-
-        #sync-button {
-            background-color: #28a745;
-            color: white;
         }
 
         /* --- LOADING OVERLAY POPUP GIỮA MÀN HÌNH --- */
@@ -244,7 +245,6 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* --- BIỂU TƯỢNG V XANH LÁ ANIMATION --- */
         .checkmark-svg {
             width: 42px;
             height: 42px;
@@ -315,10 +315,10 @@
         </table>
     </div>
 
-    <!-- Nút bắt đầu / dừng quét camera -->
+    <!-- Nút điều khiển quét QR -->
     <div class="button-container">
-        <button id="start-button">Bắt đầu quét</button>
-        <button id="stop-button">Dừng quét</button>
+        <button id="action-btn-1" class="btn-success">Bắt đầu quét</button>
+        <button id="action-btn-2" class="btn-danger" style="display: none;">Dừng quét</button>
     </div>
 
     <!-- Khung hiển thị Camera -->
@@ -368,8 +368,7 @@
         </tr>
     </table>
 
-    <!-- Nút tương tác quy trình 2 bước -->
-    <button id="scan-2-button">Quét QR lần 2</button>
+    <!-- Nút Đồng bộ -->
     <button id="sync-button">Đồng bộ mã</button>
 
     <!-- Canvas ẩn phục vụ giải mã QR -->
@@ -380,6 +379,7 @@
             const APP_STORAGE_KEY = "userAppDataOfDKienInBVN";
 
             let scanStep = 1;
+            let isCameraRunning = false;
             let videoStream = null;
             let animationFrameId = null;
 
@@ -405,11 +405,12 @@
             const codeKeToanEl = document.getElementById("code-ke-toan");
             const noteInput = document.getElementById("note");
 
-            // Buttons
-            const startBtn = document.getElementById("start-button");
-            const stopBtn = document.getElementById("stop-button");
-            const scan2Button = document.getElementById("scan-2-button");
+            // Dynamic Action Buttons
+            const actionBtn1 = document.getElementById("action-btn-1");
+            const actionBtn2 = document.getElementById("action-btn-2");
             const syncButton = document.getElementById("sync-button");
+
+            // Top Buttons
             const refreshBtn = document.getElementById("refresh-button");
             const logoutBtn = document.getElementById("logout-button");
             const toggleBtn = document.getElementById("toggle-button");
@@ -447,7 +448,6 @@
                 if (checkmarkEl) checkmarkEl.style.display = "none";
             }
 
-            // --- 1. HÀM BỔ TRỢ ĐỌC DỮ LIỆU & TOKEN VÀ URL API ---
             function getAppData() {
                 const jsonData = localStorage.getItem(APP_STORAGE_KEY);
                 if (!jsonData) return null;
@@ -469,11 +469,23 @@
                 return { userId, token };
             }
 
-            function getApiUrl(appData) {
-                if (appData && appData.app && appData.app.truongTrinhDongBoKeToan && appData.app.truongTrinhDongBoKeToan.API) {
-                    return appData.app.truongTrinhDongBoKeToan.API;
+            // 1. KEY API GIỮ NGUYÊN CHO CÁC TÁC VỤ THƯỜNG (LÀM MỚI & TRUY VẤN MÃ LẦN 1)
+            function getBaseApiUrl(appData) {
+                if (!appData || !appData.app) return "";
+                if (appData.app.API) return appData.app.API;
+                if (appData.app.truongTrinhQuanLyThietBi && appData.app.truongTrinhQuanLyThietBi.API) {
+                    return appData.app.truongTrinhQuanLyThietBi.API;
                 }
                 return "";
+            }
+
+            // 2. KEY API CHỈ THAY ĐỔI RIÊNG CHO ĐỒNG BỘ DỮ LIỆU
+            function getSyncApiUrl(appData) {
+                if (!appData || !appData.app) return "";
+                if (appData.app.truongTrinhDongBoKeToan && appData.app.truongTrinhDongBoKeToan.API) {
+                    return appData.app.truongTrinhDongBoKeToan.API;
+                }
+                return getBaseApiUrl(appData);
             }
 
             function loadUserData() {
@@ -494,11 +506,255 @@
                 return true;
             }
 
-            // --- 2. HÀM LÀM MỚI DỮ LIỆU TỪ MÁY CHỦ (POST API) ---
+            // --- 3. QUẢN LÝ TRẠNG THÁI ẨN/HIỆN THÔNG TIN NGƯỜI DÙNG ---
+            const savedToggleState = localStorage.getItem("userInfoDisplayState_DongBoCode");
+            if (savedToggleState) {
+                userInfoSection.style.display = savedToggleState;
+            }
+
+            toggleBtn.addEventListener("click", function () {
+                const isHidden = userInfoSection.style.display === "none";
+                const newDisplayState = isHidden ? "block" : "none";
+                userInfoSection.style.display = newDisplayState;
+                localStorage.setItem("userInfoDisplayState_DongBoCode", newDisplayState);
+            });
+
+            // --- 4. CẬP NHẬT GIAO DIỆN NÚT BẤM VÀ ĐIỀU KHIỂN ---
+            function renderUIState() {
+                const hasScan1 = !!codeBaoTriEl.textContent.trim();
+                const hasScan2 = !!codeKeToanEl.textContent.trim();
+
+                if (isCameraRunning) {
+                    // Khi đang mở Camera
+                    actionBtn1.style.display = "block";
+                    actionBtn1.disabled = true;
+                    actionBtn1.style.opacity = "0.6";
+
+                    actionBtn2.style.display = "block";
+                    actionBtn2.textContent = "Dừng quét";
+                    actionBtn2.className = "btn-danger";
+
+                    syncButton.style.display = "none";
+                } else {
+                    // Khi Camera đang tắt
+                    actionBtn1.disabled = false;
+                    actionBtn1.style.opacity = "1";
+
+                    if (!hasScan1) {
+                        // Chưa quét lần 1
+                        scanStep = 1;
+                        actionBtn1.style.display = "block";
+                        actionBtn1.textContent = "Bắt đầu quét";
+                        actionBtn1.className = "btn-success";
+
+                        actionBtn2.style.display = "none";
+                        syncButton.style.display = "none";
+                    } else if (hasScan1 && !hasScan2) {
+                        // Đã quét lần 1, chuẩn bị quét lần 2 (Nút Quét lần 2 thay vị trí Bắt đầu quét)
+                        scanStep = 2;
+                        actionBtn1.style.display = "block";
+                        actionBtn1.textContent = "Quét lần 2";
+                        actionBtn1.className = "btn-warning";
+
+                        actionBtn2.style.display = "block";
+                        actionBtn2.textContent = "Hủy kết quả";
+                        actionBtn2.className = "btn-danger";
+
+                        syncButton.style.display = "none";
+                    } else {
+                        // Đã hoàn thành cả 2 lần quét
+                        actionBtn1.style.display = "block";
+                        actionBtn1.textContent = "Quét lại từ đầu";
+                        actionBtn1.className = "btn-warning";
+
+                        actionBtn2.style.display = "block";
+                        actionBtn2.textContent = "Hủy kết quả";
+                        actionBtn2.className = "btn-danger";
+
+                        syncButton.style.display = "block";
+                    }
+                }
+            }
+
+            // Click Nút hành động 1 (Bắt đầu quét / Quét lần 2 / Quét lại)
+            actionBtn1.addEventListener("click", () => {
+                if (isCameraRunning) return;
+
+                const hasScan1 = !!codeBaoTriEl.textContent.trim();
+                const hasScan2 = !!codeKeToanEl.textContent.trim();
+
+                if (hasScan1 && hasScan2) {
+                    clearSyncData();
+                    scanStep = 1;
+                } else if (hasScan1) {
+                    scanStep = 2;
+                } else {
+                    scanStep = 1;
+                }
+                startScanner();
+            });
+
+            // Click Nút hành động 2 (Dừng quét HOẶC Hủy kết quả)
+            actionBtn2.addEventListener("click", () => {
+                if (isCameraRunning) {
+                    stopScanner();
+                } else {
+                    if (confirm("Bạn có chắc chắn muốn hủy kết quả và quét lại từ đầu?")) {
+                        clearSyncData();
+                    }
+                }
+            });
+
+            // --- 5. ĐIỀU KHIỂN CAMERA ---
+            function startScanner() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                        .then(function (stream) {
+                            videoStream = stream;
+                            videoEl.srcObject = stream;
+                            videoEl.setAttribute("playsinline", true);
+                            videoEl.play();
+                            videoContainer.style.display = "block";
+                            isCameraRunning = true;
+                            renderUIState();
+                            animationFrameId = requestAnimationFrame(tickScan);
+                        })
+                        .catch(function (err) {
+                            console.error("Lỗi mở camera:", err);
+                            alert("Không thể truy cập camera. Vui lòng cấp quyền truy cập!");
+                        });
+                } else {
+                    alert("Trình duyệt không hỗ trợ mở camera!");
+                }
+            }
+
+            function stopScanner() {
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                    videoStream = null;
+                }
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                }
+                videoContainer.style.display = "none";
+                isCameraRunning = false;
+                renderUIState();
+            }
+
+            function tickScan() {
+                if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+                    canvasEl.height = videoEl.videoHeight;
+                    canvasEl.width = videoEl.videoWidth;
+                    canvasCtx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+
+                    const imageData = canvasCtx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert",
+                    });
+
+                    if (code && code.data.trim() !== "") {
+                        handleQrResult(code.data.trim());
+                        return;
+                    }
+                }
+                animationFrameId = requestAnimationFrame(tickScan);
+            }
+
+            function handleQrResult(scannedText) {
+                if (scanStep === 1) {
+                    fetchAssetData(scannedText);
+                } else if (scanStep === 2) {
+                    codeKeToanEl.textContent = scannedText;
+                    localStorage.setItem("codeKeToan", scannedText);
+
+                    stopScanner();
+                    showSuccess("Đã quét thành công Mã - BP Kế Toán!");
+                }
+            }
+
+            // --- 6. TRUY VẤN THÔNG TIN THIẾT BỊ (GIỮ NGUYÊN KEY API BAN ĐẦU) ---
+            function fetchAssetData(assetCode) {
+                stopScanner();
+
+                const appData = getAppData();
+                const auth = getAuthInfo(appData);
+                const apiUrl = getBaseApiUrl(appData);
+
+                if (!auth || !apiUrl) {
+                    alert("Không tìm thấy thông tin xác thực hoặc URL API. Vui lòng đăng nhập lại!");
+                    renderUIState();
+                    return;
+                }
+
+                showLoading("Đang lấy thông tin thiết bị...");
+
+                const requestBody = `func=getAssetData` +
+                    `&id=${encodeURIComponent(auth.userId)}` +
+                    `&idUser=${encodeURIComponent(auth.userId)}` +
+                    `&token=${encodeURIComponent(auth.token)}` +
+                    `&maBaoTri=${encodeURIComponent(assetCode)}`;
+
+                let isSuccess = false;
+
+                fetch(apiUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: requestBody
+                })
+                .then(res => {
+                    if (!res.ok) throw new Error("Kết nối server thất bại.");
+                    return res.json();
+                })
+                .then(response => {
+                    if (response.status === "success" && response.data) {
+                        isSuccess = true;
+                        hideLoading();
+
+                        const asset = response.data;
+                        const realAssetCode = asset.maBaoTri || asset.assetCode || assetCode;
+                        const realSerial = asset.soSeri || asset.serialNumber || "";
+                        const realType = asset.loaiMay || asset.machineType || "";
+                        const realBrand = asset.nhanHieu || asset.brand || "";
+                        const realModel = asset.model || "";
+
+                        assetCodeEl.textContent = realAssetCode;
+                        serialNumberEl.textContent = realSerial;
+                        machineTypeEl.textContent = realType;
+                        brandEl.textContent = realBrand;
+                        modelEl.textContent = realModel;
+
+                        codeBaoTriEl.textContent = realAssetCode;
+
+                        localStorage.setItem("assetCode", realAssetCode);
+                        localStorage.setItem("serialNumber", realSerial);
+                        localStorage.setItem("machineType", realType);
+                        localStorage.setItem("brand", realBrand);
+                        localStorage.setItem("model", realModel);
+                        localStorage.setItem("codeBaoTri", realAssetCode);
+
+                        renderUIState();
+                    } else {
+                        alert(response.notification || "Không tìm thấy thông tin thiết bị với mã này!");
+                        renderUIState();
+                    }
+                })
+                .catch(err => {
+                    console.error("Lỗi fetchAssetData:", err);
+                    alert("Có lỗi khi kết nối máy chủ!");
+                    renderUIState();
+                })
+                .finally(() => {
+                    if (!isSuccess) {
+                        hideLoading();
+                    }
+                });
+            }
+
+            // --- 7. LÀM MỚI DỮ LIỆU (GIỮ NGUYÊN KEY API BAN ĐẦU) ---
             function updateData() {
                 const appData = getAppData();
                 const auth = getAuthInfo(appData);
-                const apiUrl = getApiUrl(appData);
+                const apiUrl = getBaseApiUrl(appData);
 
                 if (!auth || !apiUrl) {
                     alert("Không tìm thấy cấu hình tài khoản hoặc URL API. Vui lòng đăng nhập lại!");
@@ -566,174 +822,11 @@
                 }
             });
 
-            toggleBtn.addEventListener("click", () => {
-                userInfoSection.style.display = (userInfoSection.style.display === "none") ? "block" : "none";
-            });
-
-            // --- 3. XỬ LÝ CAMERA VÀ QUÉT QR CODE ---
-            function startScanner() {
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                        .then(function (stream) {
-                            videoStream = stream;
-                            videoEl.srcObject = stream;
-                            videoEl.setAttribute("playsinline", true);
-                            videoEl.play();
-                            videoContainer.style.display = "block";
-                            animationFrameId = requestAnimationFrame(tickScan);
-                        })
-                        .catch(function (err) {
-                            console.error("Lỗi mở camera:", err);
-                            alert("Không thể truy cập camera. Vui lòng cấp quyền truy cập!");
-                        });
-                } else {
-                    alert("Trình duyệt không hỗ trợ mở camera!");
-                }
-            }
-
-            function stopScanner() {
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                    videoStream = null;
-                }
-                if (animationFrameId) {
-                    cancelAnimationFrame(animationFrameId);
-                }
-                videoContainer.style.display = "none";
-            }
-
-            function tickScan() {
-                if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
-                    canvasEl.height = videoEl.videoHeight;
-                    canvasEl.width = videoEl.videoWidth;
-                    canvasCtx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
-                    
-                    const imageData = canvasCtx.getImageData(0, 0, canvasEl.width, canvasEl.height);
-                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                        inversionAttempts: "dontInvert",
-                    });
-
-                    if (code && code.data.trim() !== "") {
-                        window.handleQrResult(code.data.trim());
-                        return;
-                    }
-                }
-                animationFrameId = requestAnimationFrame(tickScan);
-            }
-
-            startBtn.addEventListener("click", () => {
-                scanStep = 1;
-                startScanner();
-            });
-
-            stopBtn.addEventListener("click", stopScanner);
-
-            // --- 4. LOGIC QUY TRÌNH 2 BƯỚC QUÉT & LẤY DỮ LIỆU TỪ API THẬT ---
-            window.handleQrResult = function (scannedText) {
-                if (scanStep === 1) {
-                    fetchAssetData(scannedText);
-                } else if (scanStep === 2) {
-                    codeKeToanEl.textContent = scannedText;
-                    localStorage.setItem("codeKeToan", scannedText);
-
-                    stopScanner();
-                    scan2Button.style.display = "none";
-                    syncButton.style.display = "block";
-                    showSuccess("Đã quét thành công Mã - BP Kế Toán!");
-                }
-            };
-
-            // TRUY VẤN DỮ LIỆU THIẾT BỊ TỪ API THẬT (KHÔNG HÀM GIẢ ĐỊNH)
-            function fetchAssetData(assetCode) {
-                stopScanner();
-
-                const appData = getAppData();
-                const auth = getAuthInfo(appData);
-                const apiUrl = getApiUrl(appData);
-
-                if (!auth || !apiUrl) {
-                    alert("Không tìm thấy thông tin xác thực hoặc URL API. Vui lòng đăng nhập lại!");
-                    return;
-                }
-
-                showLoading("Đang lấy thông tin thiết bị...");
-
-                const requestBody = `func=getAssetData` +
-                    `&id=${encodeURIComponent(auth.userId)}` +
-                    `&idUser=${encodeURIComponent(auth.userId)}` +
-                    `&token=${encodeURIComponent(auth.token)}` +
-                    `&maBaoTri=${encodeURIComponent(assetCode)}`;
-
-                let isSuccess = false;
-
-                fetch(apiUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                    body: requestBody
-                })
-                .then(res => {
-                    if (!res.ok) throw new Error("Kết nối server thất bại.");
-                    return res.json();
-                })
-                .then(response => {
-                    if (response.status === "success" && response.data) {
-                        isSuccess = true;
-                        hideLoading();
-
-                        const asset = response.data;
-                        const realAssetCode = asset.maBaoTri || asset.assetCode || assetCode;
-                        const realSerial = asset.soSeri || asset.serialNumber || "";
-                        const realType = asset.loaiMay || asset.machineType || "";
-                        const realBrand = asset.nhanHieu || asset.brand || "";
-                        const realModel = asset.model || "";
-
-                        assetCodeEl.textContent = realAssetCode;
-                        serialNumberEl.textContent = realSerial;
-                        machineTypeEl.textContent = realType;
-                        brandEl.textContent = realBrand;
-                        modelEl.textContent = realModel;
-
-                        localStorage.setItem("assetCode", realAssetCode);
-                        localStorage.setItem("serialNumber", realSerial);
-                        localStorage.setItem("machineType", realType);
-                        localStorage.setItem("brand", realBrand);
-                        localStorage.setItem("model", realModel);
-
-                        window.onAssetDataLoaded(realAssetCode);
-                    } else {
-                        alert(response.notification || "Không tìm thấy thông tin thiết bị với mã này trên hệ thống!");
-                    }
-                })
-                .catch(err => {
-                    console.error("Lỗi fetchAssetData:", err);
-                    alert("Có lỗi khi kết nối máy chủ để truy vấn thiết bị!");
-                })
-                .finally(() => {
-                    if (!isSuccess) {
-                        hideLoading();
-                    }
-                });
-            }
-
-            window.onAssetDataLoaded = function (assetCode) {
-                codeBaoTriEl.textContent = assetCode || "";
-                localStorage.setItem("codeBaoTri", assetCode || "");
-
-                scan2Button.style.display = "block";
-                syncButton.style.display = "none";
-            };
-
-            scan2Button.addEventListener("click", () => {
-                scanStep = 2;
-                alert("Vui lòng hướng camera vào mã QR của BP Kế Toán để quét lần 2.");
-                startScanner();
-            });
-
-            // --- 5. ĐỒNG BỘ MÃ (GỬI POST API TỚI SERVER THẬT) ---
+            // --- 8. ĐỒNG BỘ MÃ (CHỈ THAY ĐỔI DÙNG KEY API truongTrinhDongBoKeToan) ---
             syncButton.addEventListener("click", () => {
                 const appData = getAppData();
                 const auth = getAuthInfo(appData);
-                const apiUrl = getApiUrl(appData);
+                const apiUrl = getSyncApiUrl(appData); // Đã đổi sang truongTrinhDongBoKeToan
 
                 if (!auth || !apiUrl) {
                     alert("Chưa đăng nhập hoặc thiếu Token / URL API xác thực!");
@@ -802,7 +895,11 @@
                 });
             });
 
-            // --- 6. XÓA VÀ KHÔI PHỤC TRẠNG THÁI ---
+            noteInput.addEventListener("input", function () {
+                localStorage.setItem("note", this.value);
+            });
+
+            // --- 9. HÀM XÓA KẾT QUẢ QUÉT ---
             function clearSyncData() {
                 localStorage.removeItem("codeBaoTri");
                 localStorage.removeItem("codeKeToan");
@@ -824,11 +921,11 @@
                 noteInput.value = "";
 
                 scanStep = 1;
-                scan2Button.style.display = "none";
-                syncButton.style.display = "none";
+                renderUIState();
             }
 
-            function updateButtonVisibility() {
+            // --- 10. KHÔI PHỤC TRẠNG THÁI DỮ LIỆU ---
+            function restoreSavedState() {
                 if (!loadUserData()) return;
 
                 let savedCodeBaoTri = localStorage.getItem("codeBaoTri");
@@ -845,18 +942,14 @@
 
                     if (savedCodeKeToan) {
                         codeKeToanEl.textContent = savedCodeKeToan;
-                        scan2Button.style.display = "none";
-                        syncButton.style.display = "block";
-                    } else {
-                        scan2Button.style.display = "block";
-                        syncButton.style.display = "none";
                     }
                 } else {
                     clearSyncData();
                 }
+                renderUIState();
             }
 
-            updateButtonVisibility();
+            restoreSavedState();
         };
     </script>
 </body>
