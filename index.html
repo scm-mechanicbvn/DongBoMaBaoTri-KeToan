@@ -367,9 +367,7 @@
 
     <script>
         window.onload = function () {
-            // Thay đổi duy nhất khóa lưu trữ theo yêu cầu
-            const APP_STORAGE_KEY = "userAppDataOfDKienInBVN";
-
+            const STORAGE_KEY = "userAppDataOfDKienInBVN";
             let userAppData = null;
             let scanStep = 1;
             let isCameraRunning = false;
@@ -436,7 +434,8 @@
             }
 
             function loadUserData() {
-                const userAppDataString = localStorage.getItem(APP_STORAGE_KEY);
+                const userAppDataString = localStorage.getItem(STORAGE_KEY);
+
                 if (userAppDataString) {
                     try {
                         userAppData = JSON.parse(userAppDataString);
@@ -446,7 +445,7 @@
                         return true;
                     } catch (e) {
                         console.error("Lỗi phân tích dữ liệu người dùng từ localStorage:", e);
-                        localStorage.removeItem(APP_STORAGE_KEY);
+                        localStorage.removeItem(STORAGE_KEY);
                         userAppData = null;
                         window.location.href = "login.html";
                         return false;
@@ -614,12 +613,11 @@
                 }
             }
 
-            // Đúng cấu trúc gửi API gốc của bạn
             function fetchAssetData(qrResult) {
                 stopScanner();
 
-                if (!userAppData || !userAppData.user) {
-                    alert("Không tìm thấy thông tin tài khoản!");
+                if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.name || !userAppData.user.token) {
+                    alert("Thông tin người dùng (ID, Tên hoặc Token) chưa được tải. Vui lòng bấm 'Làm mới' hoặc đăng nhập lại.");
                     renderUIState();
                     return;
                 }
@@ -627,10 +625,12 @@
                 const idUser = userAppData.user.username;
                 const tenNguoiDung = userAppData.user.name;
                 const token = userAppData.user.token;
-                const apiUrl = (userAppData.app && userAppData.app.truongTrinhLayDanhSachTaiSanTNM) ? userAppData.app.truongTrinhLayDanhSachTaiSanTNM.API : "";
 
-                if (!apiUrl) {
-                    alert("Không tìm thấy cấu hình URL API!");
+                const rawAppData = localStorage.getItem(STORAGE_KEY);
+                const apiBaseUrl = rawAppData ? JSON.parse(rawAppData).app.truongTrinhLayDanhSachTaiSanTNM.API : "";
+
+                if (!apiBaseUrl) {
+                    alert("Không tìm thấy API Base URL.");
                     renderUIState();
                     return;
                 }
@@ -644,125 +644,114 @@
                     `&maTS=${encodeURIComponent(qrResult)}` +
                     `&token=${encodeURIComponent(token)}`;
 
-                let isSuccess = false;
+                console.log("Request body:", requestBody);
 
-                fetch(apiUrl, {
+                fetch(apiBaseUrl, {
                     method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
                     body: requestBody
                 })
-                .then(res => {
-                    if (!res.ok) throw new Error("Kết nối server thất bại.");
-                    return res.json();
-                })
                 .then(response => {
-                    if (response.status === "success" && response.data) {
-                        isSuccess = true;
-                        hideLoading();
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Dữ liệu từ API:", data);
+                    hideLoading();
 
-                        const asset = response.data;
-                        const realAssetCode = asset.maBaoTri || asset.assetCode || qrResult;
-                        const realSerial = asset.soSeri || asset.serialNumber || "";
-                        const realType = asset.loaiMay || asset.machineType || "";
-                        const realBrand = asset.nhanHieu || asset.brand || "";
-                        const realModel = asset.model || "";
+                    if (data.status && data.status.toLowerCase() === "success") {
+                        const maTSVal = data.maTaiSan || qrResult;
+                        const soSeriVal = data.soSeri || "";
+                        const loaiMayVal = data.loaiMay || "";
+                        const nhanHieuVal = data.nhanHieu || "";
+                        const modelVal = data.model || "";
 
-                        assetCodeEl.textContent = realAssetCode;
-                        serialNumberEl.textContent = realSerial;
-                        machineTypeEl.textContent = realType;
-                        brandEl.textContent = realBrand;
-                        modelEl.textContent = realModel;
+                        assetCodeEl.textContent = maTSVal;
+                        serialNumberEl.textContent = soSeriVal;
+                        machineTypeEl.textContent = loaiMayVal;
+                        brandEl.textContent = nhanHieuVal;
+                        modelEl.textContent = modelVal;
 
-                        codeBaoTriEl.textContent = realAssetCode;
+                        codeBaoTriEl.textContent = maTSVal;
 
-                        localStorage.setItem("assetCode", realAssetCode);
-                        localStorage.setItem("serialNumber", realSerial);
-                        localStorage.setItem("machineType", realType);
-                        localStorage.setItem("brand", realBrand);
-                        localStorage.setItem("model", realModel);
-                        localStorage.setItem("codeBaoTri", realAssetCode);
+                        localStorage.setItem("assetCode", maTSVal);
+                        localStorage.setItem("serialNumber", soSeriVal);
+                        localStorage.setItem("machineType", loaiMayVal);
+                        localStorage.setItem("brand", nhanHieuVal);
+                        localStorage.setItem("model", modelVal);
+                        localStorage.setItem("codeBaoTri", maTSVal);
 
                         renderUIState();
                     } else {
-                        alert(response.notification || "Không tìm thấy thông tin thiết bị với mã này!");
+                        alert(data.notification || "Không tìm thấy thông tin chi tiết cho mã tài sản này.");
                         renderUIState();
                     }
                 })
-                .catch(err => {
-                    console.error("Lỗi fetchAssetData:", err);
-                    alert("Có lỗi khi kết nối máy chủ!");
+                .catch(error => {
+                    hideLoading();
+                    console.error("Error fetching asset data:", error);
+                    alert("Không thể lấy thông tin tài sản. Vui lòng kiểm tra kết nối hoặc API.");
                     renderUIState();
-                })
-                .finally(() => {
-                    if (!isSuccess) {
-                        hideLoading();
-                    }
                 });
             }
 
             function updateData() {
-                if (!userAppData || !userAppData.user) {
-                    alert("Không tìm thấy thông tin tài khoản!");
+                if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.token) {
+                    alert("Đã xảy ra sự cố! Vui lòng đăng nhập lại.");
+                    window.location.href = "login.html";
                     return;
                 }
 
-                const idUser = userAppData.user.username;
-                const tenNguoiDung = userAppData.user.name;
-                const token = userAppData.user.token;
-                const apiUrl = (userAppData.app && userAppData.app.truongTrinhCapNhatThanhPhanApp) ? userAppData.app.truongTrinhCapNhatThanhPhanApp.API : "";
+                const idUserVal = userAppData.user.username;
+                const tokenVal = userAppData.user.token;
 
-                if (!apiUrl) {
-                    alert("Không tìm thấy cấu hình URL API cập nhật!");
+                const rawAppData = localStorage.getItem(STORAGE_KEY);
+                const apiBaseUrl = rawAppData ? JSON.parse(rawAppData).app.truongTrinhCapNhatThanhPhanApp.API : "";
+
+                if (!apiBaseUrl) {
+                    alert("Không tìm thấy API Base URL.");
                     return;
                 }
 
-                showLoading("Đang tải dữ liệu...");
+                showLoading("Đang lấy dữ liệu...");
 
                 const requestBody =
-                    `func=update` +
-                    `&idUser=${encodeURIComponent(idUser)}` +
-                    `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
-                    `&token=${encodeURIComponent(token)}`;
+                    `func=capnhatduongdan` +
+                    `&idUser=${encodeURIComponent(idUserVal)}` +
+                    `&token=${encodeURIComponent(tokenVal)}`;
 
-                let isSuccess = false;
+                console.log("Request body:", requestBody);
 
-                fetch(apiUrl, {
+                fetch(apiBaseUrl, {
                     method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
                     body: requestBody
                 })
-                .then(res => {
-                    if (!res.ok) throw new Error("Kết nối server thất bại.");
-                    return res.json();
-                })
                 .then(response => {
-                    if (response.status === "success") {
-                        isSuccess = true;
-                        const updatedAppData = {
-                            user: response.user || userAppData.user,
-                            app: response.app || userAppData.app,
-                            data: response.data || userAppData.data
-                        };
-                        localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(updatedAppData));
-                        loadUserData();
-                        showSuccess("Cập nhật thành công!");
-                    } else {
-                        alert(response.notification || "Thất bại từ máy chủ.");
-                        const noti = (response.notification || "").toLowerCase();
-                        if (response.status === "auth_error" || noti.includes("xác thực") || noti.includes("token") || noti.includes("đăng nhập")) {
-                            localStorage.removeItem(APP_STORAGE_KEY);
-                            window.location.href = "login.html";
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.status === "success") {
+                        showSuccess(data.notification || "Cập nhật dữ liệu thành công!");
+                        if (userAppData) {
+                            userAppData.app = data.app;
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(userAppData));
+                            loadUserData();
                         }
-                    }
-                })
-                .catch(err => {
-                    console.error("Lỗi updateData:", err);
-                    alert("Có lỗi kết nối mạng!");
-                })
-                .finally(() => {
-                    if (!isSuccess) {
+                    } else {
                         hideLoading();
+                        alert("Có lỗi khi cập nhật dữ liệu. " + (data.notification || ""));
                     }
+                })
+                .catch(error => {
+                    hideLoading();
+                    console.error("Lỗi khi gọi API POST:", error);
+                    alert("Không thể kết nối đến API POST.");
                 });
             }
 
@@ -770,26 +759,29 @@
 
             logoutBtn.addEventListener("click", () => {
                 if (confirm("Bạn có chắc chắn muốn đăng xuất?")) {
-                    localStorage.removeItem(APP_STORAGE_KEY);
+                    localStorage.removeItem(STORAGE_KEY);
                     clearSyncData();
                     window.location.href = "login.html";
                 }
             });
 
             syncButton.addEventListener("click", () => {
-                if (!userAppData || !userAppData.user) {
-                    alert("Chưa đăng nhập hoặc không tìm thấy thông tin tài khoản!");
+                if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.name || !userAppData.user.token) {
+                    alert("Thông tin người dùng chưa đầy đủ. Vui lòng đăng nhập lại!");
                     window.location.href = "login.html";
                     return;
                 }
 
                 const idUser = userAppData.user.username;
                 const tenNguoiDung = userAppData.user.name;
+                const phanXuong = userAppData.user.local || "";
                 const token = userAppData.user.token;
-                const apiUrl = (userAppData.app && userAppData.app.truongTrinhDongBoKeToan) ? userAppData.app.truongTrinhDongBoKeToan.API : "";
+
+                const rawAppData = localStorage.getItem(STORAGE_KEY);
+                const apiUrl = rawAppData ? JSON.parse(rawAppData).app.truongTrinhDongBoKeToan.API : "";
 
                 if (!apiUrl) {
-                    alert("Không tìm thấy cấu hình URL API đồng bộ!");
+                    alert("Không tìm thấy API Base URL đồng bộ!");
                     return;
                 }
 
@@ -808,10 +800,12 @@
 
                 showLoading("Đang đồng bộ dữ liệu...");
 
+                // Đã cập nhật func=capnhatdata theo chuẩn yêu cầu
                 const requestBody =
-                    `func=dongbokeToan` +
+                    `func=capnhatdata` +
                     `&idUser=${encodeURIComponent(idUser)}` +
                     `&tenNguoiDung=${encodeURIComponent(tenNguoiDung)}` +
+                    `&phanXuong=${encodeURIComponent(phanXuong)}` +
                     `&token=${encodeURIComponent(token)}` +
                     `&maBaoTri=${encodeURIComponent(maBaoTri)}` +
                     `&maKeToan=${encodeURIComponent(maKeToan)}` +
@@ -819,37 +813,34 @@
                     `&loaiMay=${encodeURIComponent(machineTypeEl.textContent.trim())}` +
                     `&nhanHieu=${encodeURIComponent(brandEl.textContent.trim())}` +
                     `&model=${encodeURIComponent(modelEl.textContent.trim())}` +
-                    `&phanXuong=${encodeURIComponent(displayedPhanXuong.textContent.trim())}` +
                     `&ghiChu=${encodeURIComponent(noteInput.value.trim())}`;
 
-                let isSuccess = false;
+                console.log("Request body đồng bộ:", requestBody);
 
                 fetch(apiUrl, {
                     method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
                     body: requestBody
                 })
                 .then(response => {
-                    if (!response.ok) throw new Error("Kết nối máy chủ không thành công");
+                    if (!response.ok) throw new Error("Network response was not ok");
                     return response.json();
                 })
                 .then(resData => {
                     if (resData.status === "success") {
-                        isSuccess = true;
                         clearSyncData();
                         showSuccess(resData.notification || "Đồng bộ mã thành công!");
                     } else {
+                        hideLoading();
                         alert(resData.notification || "Đồng bộ thất bại, vui lòng thử lại.");
                     }
                 })
                 .catch(error => {
+                    hideLoading();
                     console.error("Lỗi đồng bộ mã:", error);
                     alert("Có lỗi xảy ra khi gửi dữ liệu đồng bộ!");
-                })
-                .finally(() => {
-                    if (!isSuccess) {
-                        hideLoading();
-                    }
                 });
             });
 
