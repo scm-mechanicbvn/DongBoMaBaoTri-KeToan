@@ -372,7 +372,6 @@
             let videoStream = null;
             let animationFrameId = null;
 
-            // Lưu trữ dữ liệu bổ sung từ API
             let rawAssetData = {};
 
             const videoEl = document.getElementById("videoElement");
@@ -445,7 +444,7 @@
                         displayedPhanXuong.textContent = (userAppData.user && userAppData.user.local) ? userAppData.user.local : "";
                         return true;
                     } catch (e) {
-                        console.error("Lỗi phân tích dữ liệu người dùng từ localStorage:", e);
+                        console.error("Lỗi phân tích dữ liệu người dùng:", e);
                         localStorage.removeItem(STORAGE_KEY);
                         userAppData = null;
                         window.location.href = "login.html";
@@ -618,7 +617,7 @@
                 stopScanner();
 
                 if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.name || !userAppData.user.token) {
-                    alert("Thông tin người dùng (ID, Tên hoặc Token) chưa được tải. Vui lòng bấm 'Làm mới' hoặc đăng nhập lại.");
+                    alert("Thông tin người dùng chưa được tải. Vui lòng bấm 'Làm mới' hoặc đăng nhập lại.");
                     renderUIState();
                     return;
                 }
@@ -645,8 +644,6 @@
                     `&maTS=${encodeURIComponent(qrResult)}` +
                     `&token=${encodeURIComponent(token)}`;
 
-                console.log("Request body:", requestBody);
-
                 fetch(apiBaseUrl, {
                     method: "POST",
                     headers: {
@@ -659,11 +656,10 @@
                     return response.json();
                 })
                 .then(data => {
-                    console.log("Dữ liệu từ API:", data);
                     hideLoading();
 
                     if (data.status && data.status.toLowerCase() === "success") {
-                        rawAssetData = data; // Lưu toàn bộ dữ liệu phản hồi từ server
+                        rawAssetData = data;
 
                         const maTSVal = data.maTaiSan || qrResult;
                         const soSeriVal = data.soSeri || "";
@@ -701,6 +697,7 @@
                 });
             }
 
+            // HÀM LÀM MỚI: Ghép func=capnhatduongdan vào URL truongTrinhCapNhatThanhPhanApp
             function updateData() {
                 if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.token) {
                     alert("Đã xảy ra sự cố! Vui lòng đăng nhập lại.");
@@ -712,50 +709,53 @@
                 const tokenVal = userAppData.user.token;
 
                 const jsonData = localStorage.getItem(STORAGE_KEY);
-                const apiBaseUrl = jsonData ? JSON.parse(jsonData).app.truongTrinhCapNhatThanhPhanApp.API : "";
+                let apiBaseUrl = "";
+
+                if (jsonData) {
+                    try {
+                        const parsedData = JSON.parse(jsonData);
+                        apiBaseUrl = parsedData.app.truongTrinhCapNhatThanhPhanApp.API;
+                    } catch (e) {
+                        console.error("Lỗi đọc API URL:", e);
+                    }
+                }
 
                 if (!apiBaseUrl) {
-                    alert("Không tìm thấy API Base URL.");
+                    alert("Không tìm thấy URL của chương trình cập nhật!");
                     return;
                 }
 
                 showLoading("Đang lấy dữ liệu...");
 
-                const requestBody =
-                    `func=capnhatduongdan` +
-                    `&idUser=${encodeURIComponent(idUserVal)}` +
-                    `&token=${encodeURIComponent(tokenVal)}`;
+                // Ghép func=capnhatduongdan vào cuối URL (tự động xử lý ? hoặc &)
+                const separator = apiBaseUrl.includes("?") ? "&" : "?";
+                const fullUrl = `${apiBaseUrl}${separator}func=capnhatduongdan&idUser=${encodeURIComponent(idUserVal)}&token=${encodeURIComponent(tokenVal)}`;
 
-                console.log("Request body cập nhật app:", requestBody);
-
-                fetch(apiBaseUrl, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded"
-                    },
-                    body: requestBody
+                fetch(fullUrl, {
+                    method: "GET"
                 })
-                .then(response => {
-                    if (!response.ok) throw new Error("Network response was not ok");
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
                     if (data.status === "success") {
                         showSuccess(data.notification || "Cập nhật dữ liệu thành công!");
-                        if (userAppData) {
+                        if (userAppData && data.app) {
                             userAppData.app = data.app;
                             localStorage.setItem(STORAGE_KEY, JSON.stringify(userAppData));
                             loadUserData();
                         }
                     } else {
                         hideLoading();
-                        alert("Có lỗi khi cập nhật dữ liệu. " + (data.notification || ""));
+                        alert(data.notification || "Cập nhật thất bại.");
+                        if (data.command === "logout") {
+                            localStorage.removeItem(STORAGE_KEY);
+                            window.location.href = "login.html";
+                        }
                     }
                 })
                 .catch(error => {
                     hideLoading();
-                    console.error("Lỗi khi gọi API POST:", error);
-                    alert("Không thể kết nối đến API POST.");
+                    console.error("Lỗi khi làm mới:", error);
+                    alert("Không thể kết nối đến máy chủ.");
                 });
             }
 
@@ -803,7 +803,6 @@
 
                 showLoading("Đang đồng bộ dữ liệu...");
 
-                // Chuẩn bị tham số khớp 100% với e.parameter trên server
                 const ngayNhanMay = rawAssetData.ngayNhanMay || "";
                 const tinhTrang = rawAssetData.tinhTrang || "";
                 const tinhTrangDuyet = rawAssetData.tinhTrangDuyet || "";
@@ -824,8 +823,6 @@
                     `&tinhTrang=${encodeURIComponent(tinhTrang)}` +
                     `&tinhTrangDuyet=${encodeURIComponent(tinhTrangDuyet)}` +
                     `&ghiChu=${encodeURIComponent(noteInput.value.trim())}`;
-
-                console.log("Request body đồng bộ gửi server:", requestBody);
 
                 fetch(apiUrl, {
                     method: "POST",
