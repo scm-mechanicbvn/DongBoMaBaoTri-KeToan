@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ứng dụng Đồng bộ Mã Bảo Trì & Kế Toán</title>
+    <!-- Thư viện hỗ trợ quét QR qua Camera -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            text-align: center;
+            width: 100%;
+            margin: 0;
+            padding: 0 0 30px 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        /* --- Thanh nút bấm trên cùng --- */
+        .top-button-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 8px 10px;
+            gap: 6px;
+            background-color: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .top-button-container button {
+            flex: 1;
+            min-height: 42px;
+            padding: 6px 2px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .top-button-container button:active {
+            transform: scale(0.96);
+            opacity: 0.9;
+        }
+
+        .top-button-container #logout-button {
+            background-color: #dc3545;
+        }
+
+        /* --- Khối thông tin người dùng & Bảng --- */
+        .input-container {
+            width: 94%;
+            max-width: 600px;
+            margin: 10px auto;
+            padding: 5px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            max-width: 600px;
+            border-collapse: collapse;
+            text-align: left;
+            margin: 10px auto;
+            background-color: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        table th, table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+            word-break: break-word;
+        }
+
+        table th {
+            width: 38%;
+            background-color: #f8f9fa;
+            color: #495057;
+            font-weight: 600;
+        }
+
+        /* --- Khối điều khiển camera --- */
+        .button-container {
+            display: flex;
+            justify-content: space-between;
+            width: 94%;
+            max-width: 600px;
+            margin: 10px auto;
+            gap: 10px;
+            box-sizing: border-box;
+        }
+
+        .button-container button {
+            width: 48%;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: transform 0.1s;
+        }
+
+        .button-container button:active {
+            transform: scale(0.98);
+        }
+
+        .button-container button#stop-button {
+            background-color: #dc3545;
+        }
+
+        /* --- Container khung hình Video Quét --- */
+        #videoContainer {
+            display: none;
+            margin: 10px auto;
+            width: 94%;
+            max-width: 600px;
+            position: relative;
+        }
+
+        #videoWrapper {
+            position: relative;
+            width: 100%;
+            padding-bottom: 75%;
+            overflow: hidden;
+            background: #000;
+            border-radius: 8px;
+        }
+
+        #videoElement {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #note {
+            width: 100%;
+            height: 40px;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        #note:focus {
+            border-color: #007BFF;
+        }
+
+        /* --- Nút Quét lần 2 & Đồng bộ --- */
+        #scan-2-button, #sync-button {
+            display: none;
+            margin: 15px auto;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            width: 94%;
+            max-width: 400px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+            transition: transform 0.1s;
+        }
+
+        #scan-2-button:active, #sync-button:active {
+            transform: scale(0.98);
+        }
+
+        #scan-2-button {
+            background-color: #ffc107;
+            color: #212529;
+        }
+
+        #sync-button {
+            background-color: #28a745;
+            color: white;
+        }
+
+        /* --- LOADING OVERLAY POPUP GIỮA MÀN HÌNH --- */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.45);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(2px);
+        }
+
+        .loading-box {
+            background-color: #ffffff;
+            padding: 22px 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            min-width: 170px;
+        }
+
+        .spinner {
+            width: 38px;
+            height: 38px;
+            border: 4px solid #e9ecef;
+            border-top: 4px solid #007BFF;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* --- BIỂU TƯỢNG V XANH LÁ ANIMATION --- */
+        .checkmark-svg {
+            width: 42px;
+            height: 42px;
+            display: none;
+        }
+
+        .checkmark-circle {
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            animation: stroke 0.4s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+
+        .checkmark-check {
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.3s forwards;
+        }
+
+        @keyframes stroke {
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .loading-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- OVERLAY LOADING GIỮA MÀN HÌNH -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-box">
+            <div id="loading-spinner" class="spinner"></div>
+            <svg id="loading-checkmark" class="checkmark-svg" viewBox="0 0 52 52">
+                <circle class="checkmark-circle" cx="26" cy="26" r="23" fill="none" stroke="#28a745" stroke-width="4"/>
+                <path class="checkmark-check" fill="none" stroke="#28a745" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M14 27 l7 7 l16 -16"/>
+            </svg>
+            <div id="loading-text" class="loading-text">Đang xử lý...</div>
+        </div>
+    </div>
+
+    <!-- Khối nút bấm chức năng trên đầu -->
+    <div class="top-button-container">
+        <button id="logout-button">Đăng xuất</button>
+        <button id="refresh-button">Làm mới</button>
+        <button id="toggle-button">Ẩn/Hiện</button>
+    </div>
+
+    <!-- Thông tin tài khoản người dùng -->
+    <div class="input-container" id="user-info-section">
+        <table>
+            <tr>
+                <th>ID của bạn</th>
+                <td id="displayed-user-id">---</td>
+            </tr>
+            <tr>
+                <th>Tên người dùng</th>
+                <td id="displayed-username">---</td>
+            </tr>
+            <tr>
+                <th>Phân xưởng</th>
+                <td id="displayed-phanxuong">---</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Nút bắt đầu / dừng quét camera -->
+    <div class="button-container">
+        <button id="start-button">Bắt đầu quét</button>
+        <button id="stop-button">Dừng quét</button>
+    </div>
+
+    <!-- Khung hiển thị Camera -->
+    <div id="videoContainer">
+        <div id="videoWrapper">
+            <video id="videoElement" playsinline></video>
+        </div>
+    </div>
+
+    <!-- Bảng 1: Thông tin thiết bị từ Lần 1 -->
+    <table>
+        <tr>
+            <th>Mã tài sản</th>
+            <td id="asset-code"></td>
+        </tr>
+        <tr>
+            <th>S/N</th>
+            <td id="serial-number"></td>
+        </tr>
+        <tr>
+            <th>Loại Máy</th>
+            <td id="machine-type"></td>
+        </tr>
+        <tr>
+            <th>Nhãn hiệu</th>
+            <td id="brand"></td>
+        </tr>
+        <tr>
+            <th>Model</th>
+            <td id="model"></td>
+        </tr>
+    </table>
+
+    <!-- Bảng 2: Mã Đồng bộ Bảo Trì & Kế Toán -->
+    <table>
+        <tr>
+            <th>Mã - BP Bảo Trì</th>
+            <td id="code-bao-tri"></td>
+        </tr>
+        <tr>
+            <th>Mã - BP Kế Toán</th>
+            <td id="code-ke-toan"></td>
+        </tr>
+        <tr>
+            <th>Ghi chú</th>
+            <td><input type="text" id="note" placeholder="Nhập ghi chú (nếu có)"></td>
+        </tr>
+    </table>
+
+    <!-- Nút tương tác quy trình 2 bước -->
+    <button id="scan-2-button">Quét QR lần 2</button>
+    <button id="sync-button">Đồng bộ mã</button>
+
+    <!-- Canvas ẩn phục vụ giải mã QR -->
+    <canvas id="qr-canvas" style="display:none;"></canvas>
+
+    <script>
+        window.onload = function () {
+            let scanStep = 1;
+            let videoStream = null;
+            let animationFrameId = null;
+
+            const videoEl = document.getElementById("videoElement");
+            const videoContainer = document.getElementById("videoContainer");
+            const canvasEl = document.getElementById("qr-canvas");
+            const canvasCtx = canvasEl.getContext("2d");
+
+            // Info Elements
+            const userIdEl = document.getElementById("displayed-user-id");
+            const userNameEl = document.getElementById("displayed-username");
+            const phanXuongEl = document.getElementById("displayed-phanxuong");
+
+            // Asset Elements
+            const assetCodeEl = document.getElementById("asset-code");
+            const serialNumberEl = document.getElementById("serial-number");
+            const machineTypeEl = document.getElementById("machine-type");
+            const brandEl = document.getElementById("brand");
+            const modelEl = document.getElementById("model");
+
+            // Sync Elements
+            const codeBaoTriEl = document.getElementById("code-bao-tri");
+            const codeKeToanEl = document.getElementById("code-ke-toan");
+            const noteInput = document.getElementById("note");
+
+            // Buttons
+            const startBtn = document.getElementById("start-button");
+            const stopBtn = document.getElementById("stop-button");
+            const scan2Button = document.getElementById("scan-2-button");
+            const syncButton = document.getElementById("sync-button");
+            const refreshBtn = document.getElementById("refresh-button");
+            const logoutBtn = document.getElementById("logout-button");
+            const toggleBtn = document.getElementById("toggle-button");
+            const userInfoSection = document.getElementById("user-info-section");
+
+            // Loading Elements
+            const loadingOverlay = document.getElementById("loading-overlay");
+            const loadingSpinner = document.getElementById("loading-spinner");
+            const loadingText = document.getElementById("loading-text");
+
+            function showLoading(msg = "Đang xử lý...") {
+                loadingSpinner.style.display = "block";
+                const checkmarkEl = document.getElementById("loading-checkmark");
+                if (checkmarkEl) checkmarkEl.style.display = "none";
+                loadingText.textContent = msg;
+                loadingOverlay.style.display = "flex";
+            }
+
+            function showSuccess(msg = "Thành công!") {
+                loadingSpinner.style.display = "none";
+                const oldCheckmark = document.getElementById("loading-checkmark");
+                if (oldCheckmark) {
+                    const newCheckmark = oldCheckmark.cloneNode(true);
+                    newCheckmark.style.display = "block";
+                    oldCheckmark.parentNode.replaceChild(newCheckmark, oldCheckmark);
+                }
+                loadingText.textContent = msg;
+                setTimeout(() => { hideLoading(); }, 1700);
+            }
+
+            function hideLoading() {
+                loadingOverlay.style.display = "none";
+                loadingSpinner.style.display = "block";
+                const checkmarkEl = document.getElementById("loading-checkmark");
+                if (checkmarkEl) checkmarkEl.style.display = "none";
+            }
+
+            // --- 1. PHẦN QUẢN LÝ TÀI KHOẢN & DATA (LOCALSTORAGE) ---
+            function loadUserData() {
+                const jsonData = localStorage.getItem("userAppDataOfDKienInBVN");
+                if (!jsonData) {
+                    alert("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại!");
+                    window.location.href = "login.html";
+                    return false;
+                }
+                try {
+                    const data = JSON.parse(jsonData);
+                    if (data && data.user && data.user.username) {
+                        userIdEl.textContent = data.user.username || "---";
+                        userNameEl.textContent = data.user.name || "---";
+                        phanXuongEl.textContent = data.user.local || "---";
+                        return true;
+                    } else {
+                        alert("Chưa phát hiện thông tin đăng nhập!");
+                        window.location.href = "login.html";
+                        return false;
+                    }
+                } catch (e) {
+                    console.error("Lỗi đọc userAppDataOfDKienInBVN:", e);
+                    window.location.href = "login.html";
+                    return false;
+                }
+            }
+
+            refreshBtn.addEventListener("click", () => {
+                showLoading("Đang tải dữ liệu...");
+                setTimeout(() => {
+                    const success = loadUserData();
+                    if (success) {
+                        showSuccess("Cập nhật thành công!");
+                    } else {
+                        hideLoading();
+                    }
+                }, 500);
+            });
+
+            logoutBtn.addEventListener("click", () => {
+                if (confirm("Bạn có chắc chắn muốn đăng xuất?")) {
+                    localStorage.removeItem("userAppDataOfDKienInBVN");
+                    clearSyncData();
+                    window.location.href = "login.html";
+                }
+            });
+
+            toggleBtn.addEventListener("click", () => {
+                userInfoSection.style.display = (userInfoSection.style.display === "none") ? "block" : "none";
+            });
+
+            // --- 2. XỬ LÝ CAMERA VÀ QUÉT QR CODE ---
+            function startScanner() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                        .then(function (stream) {
+                            videoStream = stream;
+                            videoEl.srcObject = stream;
+                            videoEl.setAttribute("playsinline", true);
+                            videoEl.play();
+                            videoContainer.style.display = "block";
+                            animationFrameId = requestAnimationFrame(tickScan);
+                        })
+                        .catch(function (err) {
+                            console.error("Lỗi mở camera:", err);
+                            alert("Không thể truy cập camera. Vui lòng cấp quyền truy cập!");
+                        });
+                } else {
+                    alert("Trình duyệt không hỗ trợ mở camera!");
+                }
+            }
+
+            function stopScanner() {
+                if (videoStream) {
+                    videoStream.getTracks().forEach(track => track.stop());
+                    videoStream = null;
+                }
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                }
+                videoContainer.style.display = "none";
+            }
+
+            function tickScan() {
+                if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+                    canvasEl.height = videoEl.videoHeight;
+                    canvasEl.width = videoEl.videoWidth;
+                    canvasCtx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+                    
+                    const imageData = canvasCtx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert",
+                    });
+
+                    if (code && code.data.trim() !== "") {
+                        window.handleQrResult(code.data.trim());
+                        return;
+                    }
+                }
+                animationFrameId = requestAnimationFrame(tickScan);
+            }
+
+            startBtn.addEventListener("click", () => {
+                scanStep = 1;
+                startScanner();
+            });
+
+            stopBtn.addEventListener("click", stopScanner);
+
+            // --- 3. LOGIC QUY TRÌNH 2 BƯỚC QUÉT ---
+            window.handleQrResult = function (scannedText) {
+                if (scanStep === 1) {
+                    fetchAssetData(scannedText);
+                } else if (scanStep === 2) {
+                    codeKeToanEl.textContent = scannedText;
+                    localStorage.setItem("codeKeToan", scannedText);
+
+                    stopScanner();
+                    scan2Button.style.display = "none";
+                    syncButton.style.display = "block";
+                    showSuccess("Đã quét thành công Mã - BP Kế Toán!");
+                }
+            };
+
+            function fetchAssetData(assetCode) {
+                stopScanner();
+
+                assetCodeEl.textContent = assetCode;
+                serialNumberEl.textContent = "SN-" + assetCode;
+                machineTypeEl.textContent = "Thuyết minh thiết bị";
+                brandEl.textContent = "Chưa xác định";
+                modelEl.textContent = "STD-2026";
+
+                localStorage.setItem("assetCode", assetCode);
+                localStorage.setItem("serialNumber", serialNumberEl.textContent);
+                localStorage.setItem("machineType", machineTypeEl.textContent);
+                localStorage.setItem("brand", brandEl.textContent);
+                localStorage.setItem("model", modelEl.textContent);
+
+                window.onAssetDataLoaded(assetCode);
+            }
+
+            window.onAssetDataLoaded = function (assetCode) {
+                codeBaoTriEl.textContent = assetCode || "";
+                localStorage.setItem("codeBaoTri", assetCode || "");
+
+                scan2Button.style.display = "block";
+                syncButton.style.display = "none";
+            };
+
+            scan2Button.addEventListener("click", () => {
+                scanStep = 2;
+                alert("Vui lòng hướng camera vào mã QR của BP Kế Toán để quét lần 2.");
+                startScanner();
+            });
+
+            // --- 4. ĐỒNG BỘ MÃ (GỬI API) ---
+            syncButton.addEventListener("click", () => {
+                const jsonData = localStorage.getItem("userAppDataOfDKienInBVN");
+                let userAppData = jsonData ? JSON.parse(jsonData) : null;
+
+                if (!userAppData || !userAppData.user || !userAppData.user.username || !userAppData.user.token) {
+                    alert("Chưa đăng nhập hoặc thiếu Token xác thực!");
+                    window.location.href = "login.html";
+                    return;
+                }
+
+                let maBaoTri = codeBaoTriEl.textContent.trim();
+                let maKeToan = codeKeToanEl.textContent.trim();
+
+                if (!maBaoTri) {
+                    alert("Chưa có Mã - BP Bảo Trì (Quét lần 1).");
+                    return;
+                }
+
+                if (!maKeToan) {
+                    alert("Chưa có Mã - BP Kế Toán (Quét lần 2). Vui lòng quét lần 2 trước khi đồng bộ!");
+                    return;
+                }
+
+                const apiBaseUrl = (userAppData.app && userAppData.app.truongTrinhDongBoKeToan)
+                    ? userAppData.app.truongTrinhDongBoKeToan.API
+                    : "";
+
+                if (!apiBaseUrl) {
+                    alert("Không tìm thấy URL API 'truongTrinhDongBoKeToan'. Vui lòng kiểm tra cấu hình.");
+                    return;
+                }
+
+                showLoading("Đang đồng bộ dữ liệu...");
+
+                let requestBody = `func=dongbokeToan` +
+                    `&maBaoTri=${encodeURIComponent(maBaoTri)}` +
+                    `&maKeToan=${encodeURIComponent(maKeToan)}` +
+                    `&soSeri=${encodeURIComponent(serialNumberEl.textContent.trim())}` +
+                    `&loaiMay=${encodeURIComponent(machineTypeEl.textContent.trim())}` +
+                    `&nhanHieu=${encodeURIComponent(brandEl.textContent.trim())}` +
+                    `&model=${encodeURIComponent(modelEl.textContent.trim())}` +
+                    `&idUser=${encodeURIComponent(userAppData.user.username)}` +
+                    `&tenNguoiDung=${encodeURIComponent(userAppData.user.name)}` +
+                    `&phanXuong=${encodeURIComponent(userAppData.user.local || "")}` +
+                    `&token=${encodeURIComponent(userAppData.user.token)}` +
+                    `&ghiChu=${encodeURIComponent(noteInput.value.trim())}`;
+
+                let isSuccess = false;
+
+                fetch(apiBaseUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: requestBody
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error("Kết nối máy chủ không thành công");
+                    return response.json();
+                })
+                .then(resData => {
+                    if (resData.status === "success") {
+                        isSuccess = true;
+                        clearSyncData();
+                        showSuccess(resData.notification || "Đồng bộ mã thành công!");
+                    } else {
+                        alert(resData.notification || "Đồng bộ thất bại, vui lòng thử lại.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Lỗi đồng bộ mã:", error);
+                    alert("Có lỗi xảy ra khi gửi dữ liệu đồng bộ!");
+                })
+                .finally(() => {
+                    if (!isSuccess) {
+                        hideLoading();
+                    }
+                });
+            });
+
+            // --- 5. XÓA VÀ KHÔI PHỤC TRẠNG THÁI ---
+            function clearSyncData() {
+                localStorage.removeItem("codeBaoTri");
+                localStorage.removeItem("codeKeToan");
+                localStorage.removeItem("assetCode");
+                localStorage.removeItem("serialNumber");
+                localStorage.removeItem("machineType");
+                localStorage.removeItem("brand");
+                localStorage.removeItem("model");
+                localStorage.removeItem("note");
+
+                assetCodeEl.textContent = "";
+                serialNumberEl.textContent = "";
+                machineTypeEl.textContent = "";
+                brandEl.textContent = "";
+                modelEl.textContent = "";
+
+                codeBaoTriEl.textContent = "";
+                codeKeToanEl.textContent = "";
+                noteInput.value = "";
+
+                scanStep = 1;
+                scan2Button.style.display = "none";
+                syncButton.style.display = "none";
+            }
+
+            function updateButtonVisibility() {
+                if (!loadUserData()) return;
+
+                let savedCodeBaoTri = localStorage.getItem("codeBaoTri");
+                let savedCodeKeToan = localStorage.getItem("codeKeToan");
+
+                if (savedCodeBaoTri) {
+                    codeBaoTriEl.textContent = savedCodeBaoTri;
+                    assetCodeEl.textContent = localStorage.getItem("assetCode") || "";
+                    serialNumberEl.textContent = localStorage.getItem("serialNumber") || "";
+                    machineTypeEl.textContent = localStorage.getItem("machineType") || "";
+                    brandEl.textContent = localStorage.getItem("brand") || "";
+                    modelEl.textContent = localStorage.getItem("model") || "";
+                    noteInput.value = localStorage.getItem("note") || "";
+
+                    if (savedCodeKeToan) {
+                        codeKeToanEl.textContent = savedCodeKeToan;
+                        scan2Button.style.display = "none";
+                        syncButton.style.display = "block";
+                    } else {
+                        scan2Button.style.display = "block";
+                        syncButton.style.display = "none";
+                    }
+                } else {
+                    clearSyncData();
+                }
+            }
+
+            updateButtonVisibility();
+        };
+    </script>
+</body>
+</html>
